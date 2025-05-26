@@ -50,7 +50,10 @@ void fit_rotations_l1(
 
                 // z step
                 VectorXd zOld = z;
-                shrinkage(R*n+u, data.lambda* data.VA(ii)/rho, z);
+                if (!data.polyhedron)
+                    shrinkage(R*n+u, data.lambda* data.VA(ii)/rho, z);
+                else
+                    qpsolve(R*n+u, data.lambda* data.VA(ii), rho, data.B, z);
 
                 // u step
                 u.noalias() += R*n - z;
