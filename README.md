@@ -1,12 +1,13 @@
 # Cubic Stylization
 
 ## Note
-Please download Eigen3 3.4.0 before running `cmake`:
+Please download osqp-eigen and Eigen 3.4.0 before running `cmake`:
 
 ```
 conda create -n icg
 conda activate icg
 conda install -c conda-forge eigen=3.4.0
+conda install -c conda-forge osqp-eigen
 ```
 
 ---

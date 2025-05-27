@@ -70,10 +70,10 @@ int main(int argc, char *argv[])
     data.polyhedron = true;
     data.B.resize(4, 3);
     data.B <<
-        1, 0, 0,
-        -0.5, sqrt(3)/2, 0,
-        -0.5, -sqrt(3)/2, 0,
-        0, 0, 1;
+        1.0, 1.0, 1.0,
+        1.0, -1.0, 1.0,
+        -1.0, 1.0, 1.0,
+        -1.0, -1.0, 1.0;
 
     // cubic stylization 
     int maxIter = 1000;

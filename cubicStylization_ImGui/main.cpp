@@ -32,6 +32,7 @@ struct Mode
 {
     Eigen::MatrixXd CV; // point constraint
     bool place_constraints = true;
+    bool 
     int numCV = 0;
     Eigen::MatrixXi CV_row_col; 
 } state;
@@ -181,7 +182,7 @@ int main(int argc, char *argv[])
             for (unsigned i=0;i<E_box.rows(); ++i)
                 viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
         }
-        else
+        else if(state.)
         {
             cube_style_single_iteration(V,U,data);
             viewer.data().clear();
@@ -352,10 +353,10 @@ int main(int argc, char *argv[])
                 data.polyhedron = !data.polyhedron;
                 data.B.resize(4, 3);
                 data.B <<
-                    1, 0, 0,
-                    -0.5, sqrt(3)/2, 0,
-                    -0.5, -sqrt(3)/2, 0,
-                    0, 0, 1;
+                    1.0, 1.0, 1.0,
+                    1.0, -1.0, 1.0,
+                    -1.0, 1.0, 1.0,
+                    -1.0, -1.0, 1.0;
             }
             default:
                 return false;
