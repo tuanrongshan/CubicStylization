@@ -32,7 +32,7 @@ struct Mode
 {
     Eigen::MatrixXd CV; // point constraint
     bool place_constraints = true;
-    bool 
+    bool polyhedral = false;
     int numCV = 0;
     Eigen::MatrixXi CV_row_col; 
 } state;
@@ -43,9 +43,11 @@ int main(int argc, char *argv[])
 	using namespace Eigen;
 	using namespace std;
 
+    float anim_t = 0.0f; // interpolation for polyhedral
+
     // load mesh
-	MatrixXd V, U, VO;
-	MatrixXi F;
+	MatrixXd V, U, VO, U1;
+	MatrixXi F, F1;
 	{   
         string meshName;
         if (argc == 1)
@@ -53,10 +55,15 @@ int main(int argc, char *argv[])
         else
             meshName = argv[1];
 		string file = MESH_PATH + meshName;
+        string cubic_file = MESH_PATH + (string)"poly_" + meshName;
 		igl::readOBJ(file, V, F);
+        igl::readOBJ(cubic_file, U1, F1);
 		normalize_unitbox(V);
+        normalize_unitbox(U1);
         RowVector3d meanV = V.colwise().mean();
+        RowVector3d meanU1 = U1.colwise().mean();
         V = V.rowwise() - meanV;
+        U1 = U1.rowwise() - meanU1;
         U = V;
         VO = V;
 	}
@@ -166,7 +173,17 @@ int main(int argc, char *argv[])
         const Eigen::RowVector3d red(250.0/255, 114.0/255, 104.0/255);
         const Eigen::RowVector3d gray(200.0/255, 200.0/255, 200.0/255);
 
-        if(state.place_constraints)
+        if(state.polyhedral)
+        {
+            Eigen::MatrixXd Vframe = (1.0 - anim_t) * (state.place_constraints? V: U) + anim_t * U1;
+            
+            viewer.data().set_colors(blue);
+            viewer.data().set_vertices(Vframe);
+            viewer.data().compute_normals();
+            
+            if(anim_t < 1.0f) anim_t += 0.01f;
+        }
+        else if(state.place_constraints)
         {
             viewer.data().clear();
             viewer.data().face_based = true;
@@ -182,7 +199,7 @@ int main(int argc, char *argv[])
             for (unsigned i=0;i<E_box.rows(); ++i)
                 viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
         }
-        else if(state.)
+        else
         {
             cube_style_single_iteration(V,U,data);
             viewer.data().clear();
@@ -306,6 +323,9 @@ int main(int argc, char *argv[])
             case ' ':
             {
                 state.place_constraints = !state.place_constraints; // switch mode
+                // reset poly_mode
+                anim_t = 0.0;
+                state.polyhedral = false;
                 if (state.place_constraints)
                 {
                     resetCV();
@@ -350,13 +370,8 @@ int main(int argc, char *argv[])
             case 'B':
             case 'b':
             {
-                data.polyhedron = !data.polyhedron;
-                data.B.resize(4, 3);
-                data.B <<
-                    1.0, 1.0, 1.0,
-                    1.0, -1.0, 1.0,
-                    -1.0, 1.0, 1.0,
-                    -1.0, -1.0, 1.0;
+                state.polyhedral = !state.polyhedral;
+                draw();
             }
             default:
                 return false;
@@ -399,7 +414,7 @@ int main(int argc, char *argv[])
     // default mode: keep drawing the current mesh
     viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &)->bool
     {
-        if(viewer.core().is_animating &&!state.place_constraints)
+        if(viewer.core().is_animating && (!state.place_constraints || state.polyhedral))
             draw();
         return false;
     };
