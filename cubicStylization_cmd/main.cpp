@@ -67,6 +67,14 @@ int main(int argc, char *argv[])
     // precomputation ARAP and initialize ADMM parameters
     cube_style_precomputation(V,F,data);
 
+    data.polyhedron = true;
+    data.B.resize(4, 3);
+    data.B <<
+        1, 0, 0,
+        -0.5, sqrt(3)/2, 0,
+        -0.5, -sqrt(3)/2, 0,
+        0, 0, 1;
+
     // cubic stylization 
     int maxIter = 1000;
     double stopReldV = 1e-3; // stopping criteria for relative displacement

@@ -346,6 +346,17 @@ int main(int argc, char *argv[])
                 }
                 break;
             }
+            case 'B':
+            case 'b':
+            {
+                data.polyhedron = !data.polyhedron;
+                data.B.resize(4, 3);
+                data.B <<
+                    1, 0, 0,
+                    -0.5, sqrt(3)/2, 0,
+                    -0.5, -sqrt(3)/2, 0,
+                    0, 0, 1;
+            }
             default:
                 return false;
         }
