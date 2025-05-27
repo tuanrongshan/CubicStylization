@@ -53,6 +53,18 @@ int main(int argc, char *argv[])
             meshName = argv[1];
 		string file = MESH_PATH + meshName;
 		igl::readOBJ(file, V, F);
+
+        if(F.cols() == 4) {
+            Eigen::MatrixXi F_tr(F.rows() * 2, 3);
+            for(int i = 0; i < F.rows(); ++i) {
+                int v0 = F(i, 0), v1 = F(i, 1), v2 = F(i, 2), v3 = F(i, 3);
+                // fan triangulation
+                F_tr.row(2*i)     << v0, v1, v2;
+                F_tr.row(2*i + 1) << v0, v2, v3;
+            }
+            F = F_tr;
+        }
+
 		normalize_unitbox(V);
         RowVector3d meanV = V.colwise().mean();
         V = V.rowwise() - meanV;
