@@ -118,9 +118,9 @@ int main(int , char**)
             0., 0., 1;
     }
 
-    const RowVector3d RED (250./255,114./255,104./255);
-    const RowVector3d BLUE(149./255,217./255,244./255);
-    const RowVector3d GRAY(200./255,200./255,200./255);
+    const RowVector3d red (250./255,114./255,104./255);
+    const RowVector3d blue(149./255,217./255,244./255);
+    const RowVector3d gray(200./255,200./255,200./255);
 
     auto ensure_uv = [&](){
         if(TC.rows()!=0) return;
@@ -172,27 +172,27 @@ int main(int , char**)
 
         if(state.place_constraints){
             viewer.data().set_mesh(V,F);
-            viewer.data().set_colors(mesh_color);          // ← 原本的 GRAY/BLUE 換成這
-            viewer.data().set_points(state.CV, RED);
+            viewer.data().set_colors(mesh_color);          // ← 原本的 gray/blue 換成這
+            viewer.data().set_points(state.CV, red);
             MatrixXd V_box;
             MatrixXi E_box;
             get_bounding_box(V, V_box, E_box);
-            viewer.data().add_points(V_box, RED);
+            viewer.data().add_points(V_box, red);
             for (unsigned i=0;i<E_box.rows(); ++i)
-                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),RED);
+                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
         }else{
             cube_style_single_iteration(V,U,data);
             viewer.data().set_mesh(U,F);
             viewer.data().set_colors(mesh_color);          // ← 同上
-            viewer.data().set_points(state.CV, RED);
+            viewer.data().set_points(state.CV, red);
             MatrixXd V_box;
             MatrixXi E_box;
             get_bounding_box(V, V_box, E_box);
-            viewer.data().add_points(V_box, RED);
+            viewer.data().add_points(V_box, red);
             for (unsigned i=0;i<E_box.rows(); ++i)
-                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),RED);
+                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
         }
-        viewer.data().set_points(state.CV,RED);
+        viewer.data().set_points(state.CV,red);
         if(viewer.data().show_texture)
         {
             ensure_uv();
