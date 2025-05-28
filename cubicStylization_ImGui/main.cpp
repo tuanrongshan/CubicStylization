@@ -137,6 +137,8 @@ int main(int , char**)
     };
     auto load_mesh = [&](int idx)
     {
+        anim_t = 0.0;
+        state.polyhedral = false;
         igl::readOBJ( string(MESH_PATH)+model_names[idx], V, F );
         igl::readOBJ(string(MESH_PATH)+(string)"poly_"+model_names[idx], U1, F1);
         normalize_unitbox(V);
@@ -181,9 +183,15 @@ int main(int , char**)
         {
             Eigen::MatrixXd Vframe = (1.0 - anim_t) * (state.place_constraints? V: U) + anim_t * U1;
             
-            viewer.data().set_colors(blue);
-            viewer.data().set_vertices(Vframe);
+            viewer.data().set_mesh(Vframe, F1);
+            viewer.data().set_colors(mesh_color);
             viewer.data().compute_normals();
+            MatrixXd V_box;
+            MatrixXi E_box;
+            get_bounding_box(V, V_box, E_box);
+            viewer.data().add_points(V_box, red);
+            for (unsigned i=0;i<E_box.rows(); ++i)
+                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
             
             if(anim_t < 1.0f) anim_t += 0.01f;
         }else if(state.place_constraints){
