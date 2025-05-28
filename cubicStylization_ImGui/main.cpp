@@ -99,8 +99,9 @@ int main(int , char**)
     cube_style_data data; 
     data.lambda = 2e-1;
     int maxCV = 100;
-
-    state.CV_row_col.resize(maxCV,2);
+    state.CV_row_col.resize(maxCV,2); // assume nor more than 100 constraints
+    
+    
 
     double theta_x = 10.0; 
 	double theta_y = 10.0; 
@@ -172,11 +173,20 @@ int main(int , char**)
         U = V;
         cube_style_precomputation(V,F,data);
     };
-    auto draw = [&](){
+    const auto draw = [&](){
         viewer.data().clear();
         viewer.data().face_based = true;
 
-        if(state.place_constraints){
+        if(state.polyhedral)
+        {
+            Eigen::MatrixXd Vframe = (1.0 - anim_t) * (state.place_constraints? V: U) + anim_t * U1;
+            
+            viewer.data().set_colors(blue);
+            viewer.data().set_vertices(Vframe);
+            viewer.data().compute_normals();
+            
+            if(anim_t < 1.0f) anim_t += 0.01f;
+        }else if(state.place_constraints){
             viewer.data().set_mesh(V,F);
             viewer.data().set_colors(mesh_color);          // ← 原本的 gray/blue 換成這
             viewer.data().set_points(state.CV, red);
@@ -399,70 +409,59 @@ int main(int , char**)
     };
 
     // recompute state.CV function
-    int maxCV = 100;
-    state.CV_row_col.resize(maxCV,2); // assume nor more than 100 constraints
-    const auto & resetCV = [&]()
-    {
-        for (int ii=0; ii<state.numCV; ii++)
-        {
-            int fid = state.CV_row_col(ii,0);
-            int c   = state.CV_row_col(ii,1);
-            RowVector3d new_c = V.row(F(fid,c));
-            state.CV.row(ii) = new_c;
-        }
-    };
+    
 
     // draw function
-    const auto & draw = [&]()
-    {
-        const Eigen::RowVector3d blue(149.0/255, 217.0/255, 244.0/255);
-        const Eigen::RowVector3d red(250.0/255, 114.0/255, 104.0/255);
-        const Eigen::RowVector3d gray(200.0/255, 200.0/255, 200.0/255);
+    // const auto & draw = [&]()
+    // {
+    //     const Eigen::RowVector3d blue(149.0/255, 217.0/255, 244.0/255);
+    //     const Eigen::RowVector3d red(250.0/255, 114.0/255, 104.0/255);
+    //     const Eigen::RowVector3d gray(200.0/255, 200.0/255, 200.0/255);
 
-        if(state.polyhedral)
-        {
-            Eigen::MatrixXd Vframe = (1.0 - anim_t) * (state.place_constraints? V: U) + anim_t * U1;
+    //     if(state.polyhedral)
+    //     {
+    //         Eigen::MatrixXd Vframe = (1.0 - anim_t) * (state.place_constraints? V: U) + anim_t * U1;
             
-            viewer.data().set_colors(blue);
-            viewer.data().set_vertices(Vframe);
-            viewer.data().compute_normals();
+    //         viewer.data().set_colors(blue);
+    //         viewer.data().set_vertices(Vframe);
+    //         viewer.data().compute_normals();
             
-            if(anim_t < 1.0f) anim_t += 0.01f;
-        }
-        else if(state.place_constraints)
-        {
-            viewer.data().clear();
-            viewer.data().face_based = true;
-            viewer.data().set_mesh(V,F);
-            viewer.data().set_colors(gray);
-            viewer.data().set_points(state.CV, red);
+    //         if(anim_t < 1.0f) anim_t += 0.01f;
+    //     }
+    //     else if(state.place_constraints)
+    //     {
+    //         viewer.data().clear();
+    //         viewer.data().face_based = true;
+    //         viewer.data().set_mesh(V,F);
+    //         viewer.data().set_colors(gray);
+    //         viewer.data().set_points(state.CV, red);
 
-            // draw bounding box
-            MatrixXd V_box;
-            MatrixXi E_box;
-            get_bounding_box(V, V_box, E_box);
-            viewer.data().add_points(V_box, red);
-            for (unsigned i=0;i<E_box.rows(); ++i)
-                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
-        }
-        else
-        {
-            cube_style_single_iteration(V,U,data);
-            viewer.data().clear();
-            viewer.data().face_based = true;
-            viewer.data().set_mesh(U,F);
-            viewer.data().set_colors(blue);
-            viewer.data().set_points(state.CV, red);
+    //         // draw bounding box
+    //         MatrixXd V_box;
+    //         MatrixXi E_box;
+    //         get_bounding_box(V, V_box, E_box);
+    //         viewer.data().add_points(V_box, red);
+    //         for (unsigned i=0;i<E_box.rows(); ++i)
+    //             viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
+    //     }
+    //     else
+    //     {
+    //         cube_style_single_iteration(V,U,data);
+    //         viewer.data().clear();
+    //         viewer.data().face_based = true;
+    //         viewer.data().set_mesh(U,F);
+    //         viewer.data().set_colors(blue);
+    //         viewer.data().set_points(state.CV, red);
 
-            // draw bounding box
-            MatrixXd V_box;
-            MatrixXi E_box;
-            get_bounding_box(U, V_box, E_box);
-            viewer.data().add_points(V_box, red);
-            for (unsigned i=0;i<E_box.rows(); ++i)
-                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
-        }
-    };
+    //         // draw bounding box
+    //         MatrixXd V_box;
+    //         MatrixXi E_box;
+    //         get_bounding_box(U, V_box, E_box);
+    //         viewer.data().add_points(V_box, red);
+    //         for (unsigned i=0;i<E_box.rows(); ++i)
+    //             viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
+    //     }
+    // };
 
     // when key pressed do 
     viewer.callback_key_pressed = [&](igl::opengl::glfw::Viewer &, unsigned int key, int mod)
@@ -622,7 +621,7 @@ int main(int , char**)
             default:
                 return false;
         }
-        draw();
+        //draw();
         return true;
     };
 

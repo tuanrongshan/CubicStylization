@@ -1,7 +1,7 @@
 # !/bin/bash
-cd build
-make clean
-cd ..
+# cd build
+# make clean
+# cd ..
 rm -rf build
 mkdir build
 cd build
