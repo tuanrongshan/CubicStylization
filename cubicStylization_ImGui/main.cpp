@@ -11,6 +11,7 @@
 #include <normalize_unitbox.h>
 #include <cube_style_data.h>
 #include <cube_style_precomputation.h>
+#include <cube_style_precomputation_quad.h>
 #include "cube_style_single_iteration.h"
 #include <get_bounding_box.h>
 
@@ -27,6 +28,8 @@
 #define OUTPUT_PATH "../"
 #endif
 
+
+static bool useQuadMesh = false;
 inline void add_axes(
     igl::opengl::ViewerData &data,
     const Eigen::Vector3d &origin,
@@ -142,26 +145,16 @@ int main(int , char**)
         state.polyhedral = false;
         igl::readOBJ( string(MESH_PATH)+model_names[idx], V, F );
         igl::readOBJ(string(MESH_PATH)+(string)"poly_"+model_names[idx], U1, F1);
-        if(F.cols() == 4) {
-            Eigen::MatrixXi F_tr(F.rows() * 2, 3);
-            for(int i = 0; i < F.rows(); ++i) {
-                int v0 = F(i, 0), v1 = F(i, 1), v2 = F(i, 2), v3 = F(i, 3);
-                // fan triangulation
-                F_tr.row(2*i)     << v0, v1, v2;
-                F_tr.row(2*i + 1) << v0, v2, v3;
-            }
-            F = F_tr;
-        }
-        if(F1.cols() == 4) {
-            Eigen::MatrixXi F_tr(F1.rows() * 2, 3);
-            for(int i = 0; i < F1.rows(); ++i) {
-                int v0 = F1(i, 0), v1 = F1(i, 1), v2 = F1(i, 2), v3 = F1(i, 3);
-                // fan triangulation
-                F_tr.row(2*i)     << v0, v1, v2;
-                F_tr.row(2*i + 1) << v0, v2, v3;
-            }
-            F1 = F_tr;
-        }
+        // if(F1.cols() == 4) {
+        //     Eigen::MatrixXi F_tr(F1.rows() * 2, 3);
+        //     for(int i = 0; i < F1.rows(); ++i) {
+        //         int v0 = F1(i, 0), v1 = F1(i, 1), v2 = F1(i, 2), v3 = F1(i, 3);
+        //         // fan triangulation
+        //         F_tr.row(2*i)     << v0, v1, v2;
+        //         F_tr.row(2*i + 1) << v0, v2, v3;
+        //     }
+        //     F1 = F_tr;
+        // }
         normalize_unitbox(V);
         normalize_unitbox(U1);
         V.rowwise() -= V.colwise().mean();
@@ -374,6 +367,7 @@ int main(int , char**)
             ImGui::BulletText("Z/X      rotate z-axis");
             ImGui::BulletText("L          show edges");
             ImGui::Text(" ");
+            ImGui::Checkbox("Use quadrilateral mesh", &useQuadMesh);
         }
         ImGui::End();
     };
@@ -615,8 +609,12 @@ int main(int , char**)
 
                     // pre computation
                     U = V;
-                    cube_style_precomputation(V,F,data);
-                }
+                    // cube_style_precomputation(V,F,data);
+                    if(F.cols() == 4 && useQuadMesh)
+                        cube_style_precomputation_quad(V,F,data);
+                    else
+                        cube_style_precomputation(V,F,data);
+                    }
                 else if(!state.place_constraints && state.CV.rows()==0) 
                 {
                     // if not constraint points, then set the F(0,0) to be the contrained point
@@ -637,8 +635,12 @@ int main(int , char**)
 
                     // pre computation
                     U = V;
-                    cube_style_precomputation(V,F,data);
-                }
+                    // cube_style_precomputation(V,F,data);
+                    if(F.cols() == 4 && useQuadMesh)
+                        cube_style_precomputation_quad(V,F,data);
+                    else
+                        cube_style_precomputation(V,F,data);
+                    }
                 break;
             }
             case 'B':
