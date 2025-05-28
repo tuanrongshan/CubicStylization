@@ -141,6 +141,26 @@ int main(int , char**)
         state.polyhedral = false;
         igl::readOBJ( string(MESH_PATH)+model_names[idx], V, F );
         igl::readOBJ(string(MESH_PATH)+(string)"poly_"+model_names[idx], U1, F1);
+        if(F.cols() == 4) {
+            Eigen::MatrixXi F_tr(F.rows() * 2, 3);
+            for(int i = 0; i < F.rows(); ++i) {
+                int v0 = F(i, 0), v1 = F(i, 1), v2 = F(i, 2), v3 = F(i, 3);
+                // fan triangulation
+                F_tr.row(2*i)     << v0, v1, v2;
+                F_tr.row(2*i + 1) << v0, v2, v3;
+            }
+            F = F_tr;
+        }
+        if(F1.cols() == 4) {
+            Eigen::MatrixXi F_tr(F1.rows() * 2, 3);
+            for(int i = 0; i < F1.rows(); ++i) {
+                int v0 = F1(i, 0), v1 = F1(i, 1), v2 = F1(i, 2), v3 = F1(i, 3);
+                // fan triangulation
+                F_tr.row(2*i)     << v0, v1, v2;
+                F_tr.row(2*i + 1) << v0, v2, v3;
+            }
+            F1 = F_tr;
+        }
         normalize_unitbox(V);
         normalize_unitbox(U1);
         V.rowwise() -= V.colwise().mean();
