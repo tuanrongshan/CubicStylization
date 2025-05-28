@@ -11,6 +11,7 @@
 #include <normalize_unitbox.h>
 #include <cube_style_data.h>
 #include <cube_style_precomputation.h>
+#include <cube_style_precomputation_quad.h>
 #include "cube_style_single_iteration.h"
 #include <get_bounding_box.h>
 
@@ -27,6 +28,7 @@
 #define OUTPUT_PATH "../"
 #endif
 
+static bool useQuadMesh = false;
 // state of the mode
 struct Mode
 {
@@ -54,16 +56,16 @@ int main(int argc, char *argv[])
 		string file = MESH_PATH + meshName;
 		igl::readOBJ(file, V, F);
 
-        if(F.cols() == 4) {
-            Eigen::MatrixXi F_tr(F.rows() * 2, 3);
-            for(int i = 0; i < F.rows(); ++i) {
-                int v0 = F(i, 0), v1 = F(i, 1), v2 = F(i, 2), v3 = F(i, 3);
-                // fan triangulation
-                F_tr.row(2*i)     << v0, v1, v2;
-                F_tr.row(2*i + 1) << v0, v2, v3;
-            }
-            F = F_tr;
-        }
+        // if(F.cols() == 4) {
+        //     Eigen::MatrixXi F_tr(F.rows() * 2, 3);
+        //     for(int i = 0; i < F.rows(); ++i) {
+        //         int v0 = F(i, 0), v1 = F(i, 1), v2 = F(i, 2), v3 = F(i, 3);
+        //         // fan triangulation
+        //         F_tr.row(2*i)     << v0, v1, v2;
+        //         F_tr.row(2*i + 1) << v0, v2, v3;
+        //     }
+        //     F = F_tr;
+        // }
 
 		normalize_unitbox(V);
         RowVector3d meanV = V.colwise().mean();
@@ -129,6 +131,7 @@ int main(int argc, char *argv[])
             ImGui::BulletText("Z/X      rotate z-axis");
             ImGui::BulletText("L          show edges");
             ImGui::Text(" ");
+            ImGui::Checkbox("Use quadrilateral mesh", &useQuadMesh);
         }
         {
             ImGui::PushItemWidth(-80);
@@ -332,8 +335,12 @@ int main(int argc, char *argv[])
 
                     // pre computation
                     U = V;
-                    cube_style_precomputation(V,F,data);
-                }
+                    // cube_style_precomputation(V,F,data);
+                    if(F.cols() == 4 && useQuadMesh)
+                        cube_style_precomputation_quad(V,F,data);
+                    else
+                        cube_style_precomputation(V,F,data);
+                    }
                 else if(!state.place_constraints && state.CV.rows()==0) 
                 {
                     // if not constraint points, then set the F(0,0) to be the contrained point
@@ -354,8 +361,12 @@ int main(int argc, char *argv[])
 
                     // pre computation
                     U = V;
-                    cube_style_precomputation(V,F,data);
-                }
+                    // cube_style_precomputation(V,F,data);
+                    if(F.cols() == 4 && useQuadMesh)
+                        cube_style_precomputation_quad(V,F,data);
+                    else
+                        cube_style_precomputation(V,F,data);
+                    }
                 break;
             }
             default:
