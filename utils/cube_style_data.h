@@ -44,12 +44,17 @@ struct cube_style_data
 	double zPlane = 0.0;
 	// for plane constraints
 
+	// for polyhedron
+	bool polyhedron;
+	Eigen::MatrixXd B;
+
 	void reset()
 	{
 		// user should tune these
 		ABSTOL = 1e-5;
 		rhoInit = 1e-3;
 		RELTOL = 1e-3;
+		polyhedron = false;
 
 		// usually these don't need to tune
 		double mu = 10;
@@ -71,6 +76,7 @@ struct cube_style_data
 		uAll = Eigen::MatrixXd();
 		rhoAll = Eigen::VectorXd();
 		objValVec = Eigen::VectorXd();
+		B = Eigen::MatrixXd();
 
 		igl::min_quad_with_fixed_data<double> solver_data;
 	}

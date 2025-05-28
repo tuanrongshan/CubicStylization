@@ -1,4 +1,16 @@
 # Cubic Stylization
+
+## Note
+Please download osqp-eigen and Eigen 3.4.0 before running `cmake`:
+
+```
+conda create -n icg
+conda activate icg
+conda install -c conda-forge eigen=3.4.0
+conda install -c conda-forge osqp-eigen
+```
+
+---
 Cubic stylization is a 3D stylization tool. Unlike image stylization (2D to 2D) and non-photorealistic rendering (3D to 2D), cubic stylization is a 3D to 3D stylization algorithm which takes a manifold triangle mesh as the input and outputs a cubified triangle mesh. 
 
 This is a C++ implementation based on "[Cubic Stylization](https://www.dgp.toronto.edu/projects/cubic-stylization/)" by [Hsueh-Ti Derek Liu](https://www.dgp.toronto.edu/~hsuehtil/) and [Alec Jacobson](https://www.cs.toronto.edu/~jacobson/). 

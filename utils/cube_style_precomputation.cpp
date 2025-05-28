@@ -10,13 +10,13 @@ void cube_style_precomputation(
 
     data.reset();
 
-    igl::per_vertex_normals(V,F, data.N);
+    igl::per_vertex_normals(V,F, data.N);   // normal vector of vertex (n_cap)
 
-    igl::cotmatrix(V,F,data.L);
+    igl::cotmatrix(V,F,data.L);             // cotangent weights (W)
 
     SparseMatrix<double> M;
     igl::massmatrix(V,F,igl::MASSMATRIX_TYPE_BARYCENTRIC,M);
-    data.VA = M.diagonal();
+    data.VA = M.diagonal();                 // barycentric area of vertex (a)
 
     vector<vector<int>> adjFList, VI;
     igl::vertex_triangle_adjacency(V.rows(),F,adjFList,VI);
@@ -29,7 +29,7 @@ void cube_style_precomputation(
     vector<int> adjF;
     for (int ii=0; ii<V.rows();  ii++)
     {
-        adjF = adjFList[ii];
+        adjF = adjFList[ii];                // adjF.size()*3 => N(i) (spokes and rims edges of vertex)
 
         data.hEList[ii].resize(adjF.size()*3, 2);
         data.WVecList[ii].resize(adjF.size()*3);

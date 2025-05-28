@@ -47,10 +47,11 @@ inline void add_axes(
 
 struct Mode
 {
-    Eigen::MatrixXd CV;             
-    bool  place_constraints = true; 
-    int   numCV = 0;
-    Eigen::MatrixXi CV_row_col;   
+    Eigen::MatrixXd CV; // point constraint
+    bool place_constraints = true;
+    bool polyhedral = false;
+    int numCV = 0;
+    Eigen::MatrixXi CV_row_col; 
 } state;
 
 static float g_uv_scale = 3.0f;
@@ -60,6 +61,8 @@ int main(int , char**)
     using namespace Eigen; 
     using namespace std;
     namespace iglm = igl::opengl::glfw::imgui; 
+
+    float anim_t = 0.0f; // interpolation for polyhedral
 
     vector<string> model_names = {
         "beetle.obj",
@@ -91,8 +94,8 @@ int main(int , char**)
     igl::opengl::glfw::imgui::ImGuiMenu menu;
     viewer.plugins.push_back(&menu);
 
-    MatrixXd V,U,VO, TC;
-    MatrixXi F, FT;
+    MatrixXd V,U,VO, TC, U1;
+    MatrixXi F, FT, F1;
     cube_style_data data; 
     data.lambda = 2e-1;
     int maxCV = 100;
@@ -134,8 +137,11 @@ int main(int , char**)
     auto load_mesh = [&](int idx)
     {
         igl::readOBJ( string(MESH_PATH)+model_names[idx], V, F );
+        igl::readOBJ(string(MESH_PATH)+(string)"poly_"+model_names[idx], U1, F1);
         normalize_unitbox(V);
+        normalize_unitbox(U1);
         V.rowwise() -= V.colwise().mean();
+        U1.rowwise() -= U1.colwise().mean();
         U  = VO = V;
         state.CV.resize(0,3); state.numCV = 0;
         state.place_constraints = true;
@@ -392,6 +398,72 @@ int main(int , char**)
         ImGui::End();
     };
 
+    // recompute state.CV function
+    int maxCV = 100;
+    state.CV_row_col.resize(maxCV,2); // assume nor more than 100 constraints
+    const auto & resetCV = [&]()
+    {
+        for (int ii=0; ii<state.numCV; ii++)
+        {
+            int fid = state.CV_row_col(ii,0);
+            int c   = state.CV_row_col(ii,1);
+            RowVector3d new_c = V.row(F(fid,c));
+            state.CV.row(ii) = new_c;
+        }
+    };
+
+    // draw function
+    const auto & draw = [&]()
+    {
+        const Eigen::RowVector3d blue(149.0/255, 217.0/255, 244.0/255);
+        const Eigen::RowVector3d red(250.0/255, 114.0/255, 104.0/255);
+        const Eigen::RowVector3d gray(200.0/255, 200.0/255, 200.0/255);
+
+        if(state.polyhedral)
+        {
+            Eigen::MatrixXd Vframe = (1.0 - anim_t) * (state.place_constraints? V: U) + anim_t * U1;
+            
+            viewer.data().set_colors(blue);
+            viewer.data().set_vertices(Vframe);
+            viewer.data().compute_normals();
+            
+            if(anim_t < 1.0f) anim_t += 0.01f;
+        }
+        else if(state.place_constraints)
+        {
+            viewer.data().clear();
+            viewer.data().face_based = true;
+            viewer.data().set_mesh(V,F);
+            viewer.data().set_colors(gray);
+            viewer.data().set_points(state.CV, red);
+
+            // draw bounding box
+            MatrixXd V_box;
+            MatrixXi E_box;
+            get_bounding_box(V, V_box, E_box);
+            viewer.data().add_points(V_box, red);
+            for (unsigned i=0;i<E_box.rows(); ++i)
+                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
+        }
+        else
+        {
+            cube_style_single_iteration(V,U,data);
+            viewer.data().clear();
+            viewer.data().face_based = true;
+            viewer.data().set_mesh(U,F);
+            viewer.data().set_colors(blue);
+            viewer.data().set_points(state.CV, red);
+
+            // draw bounding box
+            MatrixXd V_box;
+            MatrixXi E_box;
+            get_bounding_box(U, V_box, E_box);
+            viewer.data().add_points(V_box, red);
+            for (unsigned i=0;i<E_box.rows(); ++i)
+                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
+        }
+    };
+
     // when key pressed do 
     viewer.callback_key_pressed = [&](igl::opengl::glfw::Viewer &, unsigned int key, int mod)
     {
@@ -497,6 +569,9 @@ int main(int , char**)
             case ' ':
             {
                 state.place_constraints = !state.place_constraints; // switch mode
+                // reset poly_mode
+                anim_t = 0.0;
+                state.polyhedral = false;
                 if (state.place_constraints)
                 {
                     resetCV();
@@ -537,6 +612,12 @@ int main(int , char**)
                     cube_style_precomputation(V,F,data);
                 }
                 break;
+            }
+            case 'B':
+            case 'b':
+            {
+                state.polyhedral = !state.polyhedral;
+                draw();
             }
             default:
                 return false;
@@ -579,7 +660,7 @@ int main(int , char**)
     // default mode: keep drawing the current mesh
     viewer.callback_pre_draw = [&](igl::opengl::glfw::Viewer &)->bool
     {
-        if(viewer.core().is_animating &&!state.place_constraints)
+        if(viewer.core().is_animating && (!state.place_constraints || state.polyhedral))
             draw();
         return false;
     };
