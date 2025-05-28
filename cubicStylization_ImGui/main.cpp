@@ -75,7 +75,8 @@ int main(int , char**)
         "bunny.obj",
         "horse.obj",
         "lilium.obj",
-        "rockerArm.obj"
+        "rockerArm.obj",
+        "only_quad_sphere.obj"
     };
     int current_model = 0;
 
