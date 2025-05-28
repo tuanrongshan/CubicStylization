@@ -20,56 +20,85 @@
 #include <fstream>
 
 #ifndef MESH_PATH
-#define MESH_PATH "../../meshes/"
+#  define MESH_PATH "../../meshes/"
 #endif
 
 #ifndef OUTPUT_PATH
 #define OUTPUT_PATH "../"
 #endif
 
-// state of the mode
+inline void add_axes(
+    igl::opengl::ViewerData &data,
+    const Eigen::Vector3d &origin,
+    double scale = 100.0)
+{
+    using Row3 = Eigen::RowVector3d;
+
+    Row3 O = origin.transpose();
+
+    Row3 X1 = O + Row3(scale, 0, 0);
+    Row3 Y1 = O + Row3(0, scale, 0);
+    Row3 Z1 = O + Row3(0, 0, scale);
+
+    data.add_edges(O, X1, Row3(1.0, 0.0, 0.0)); 
+    data.add_edges(O, Y1, Row3(0.0, 1.0, 0.0)); 
+    data.add_edges(O, Z1, Row3(0.0, 0.0, 1.0)); 
+}
+
 struct Mode
 {
-    Eigen::MatrixXd CV; // point constraint
-    bool place_constraints = true;
-    int numCV = 0;
-    Eigen::MatrixXi CV_row_col; 
+    Eigen::MatrixXd CV;             
+    bool  place_constraints = true; 
+    int   numCV = 0;
+    Eigen::MatrixXi CV_row_col;   
 } state;
 
-// to run the code, type "./cubeStyle_bin [meshName]"
-int main(int argc, char *argv[])
+static float g_uv_scale = 3.0f;
+static int texture_mode = 0;
+int main(int , char**)
 {
-	using namespace Eigen;
-	using namespace std;
+    using namespace Eigen; 
+    using namespace std;
+    namespace iglm = igl::opengl::glfw::imgui; 
 
-    // load mesh
-	MatrixXd V, U, VO;
-	MatrixXi F;
-	{   
-        string meshName;
-        if (argc == 1)
-            meshName = "spot.obj"; // default mesh
-        else
-            meshName = argv[1];
-		string file = MESH_PATH + meshName;
-		igl::readOBJ(file, V, F);
-		normalize_unitbox(V);
-        RowVector3d meanV = V.colwise().mean();
-        V = V.rowwise() - meanV;
-        U = V;
-        VO = V;
-	}
+    vector<string> model_names = {
+        "beetle.obj",
+        "bumpy.obj",
+        "cactus.obj",
+        "kleinBottle.obj",
+        "ogre.obj",
+        "spot.obj",
+        "bob.obj",
+        "bunny.obj",
+        "horse.obj",
+        "lilium.obj",
+        "rockerArm.obj"
+    };
+    int current_model = 0;
 
-    // prepare data for cube stylization
-    cube_style_data data;
-    data.lambda = 2e-1;
+    bool orthographic  = false;
+    bool face_based    = true;
+    bool show_tex      = false;
+    bool show_overlay  = true;
+    bool wireframe     = false;
+    bool fill_faces    = true;
+    char outputName[128] = "output";
 
-    // initialize viewer
-    igl::opengl::glfw::Viewer viewer;
+    RowVector3d mesh_color(149./255, 217./255, 244./255); 
+    Vector3f    bg_color (208./255, 237./255, 227./255); 
+
+    igl::opengl::glfw::Viewer           viewer;
     igl::opengl::glfw::imgui::ImGuiMenu menu;
-	viewer.plugins.push_back(&menu);
+    viewer.plugins.push_back(&menu);
 
-    // rotation parameters
+    MatrixXd V,U,VO, TC;
+    MatrixXi F, FT;
+    cube_style_data data; 
+    data.lambda = 2e-1;
+    int maxCV = 100;
+
+    state.CV_row_col.resize(maxCV,2);
+
     double theta_x = 10.0; 
 	double theta_y = 10.0; 
 	double theta_z = 10.0; 
@@ -89,24 +118,207 @@ int main(int argc, char *argv[])
             0., 0., 1;
     }
 
-    // draw additional windows
-    // string outputName = "output.obj";
-    char outputName[128] = "output";
-	menu.callback_draw_viewer_window = [](){};
-	menu.callback_draw_custom_window = [&]()
-	{
-		// Define next window position + size
-		{
-			ImGui::SetNextWindowPos(ImVec2(0.f * menu.menu_scaling(), 0), ImGuiSetCond_FirstUseEver);
-			ImGui::SetNextWindowSize(ImVec2(220, 400), ImGuiSetCond_FirstUseEver);
-			ImGui::Begin(
-				"Cubic Stylization", nullptr,
-				ImGuiWindowFlags_NoSavedSettings
-			);
-		}
-        // Expose the same variable directly
+    const RowVector3d RED (250./255,114./255,104./255);
+    const RowVector3d BLUE(149./255,217./255,244./255);
+    const RowVector3d GRAY(200./255,200./255,200./255);
+
+    auto ensure_uv = [&](){
+        if(TC.rows()!=0) return;
+        RowVector3d mn = V.colwise().minCoeff();
+        RowVector3d mx = V.colwise().maxCoeff();
+        TC.resize(V.rows(),2);
+        TC.col(0) = g_uv_scale * (V.col(0).array()-mn[0])/(mx[0]-mn[0]);
+        TC.col(1) = g_uv_scale * (V.col(1).array()-mn[1])/(mx[1]-mn[1]);
+        FT = F;
+    };
+    auto load_mesh = [&](int idx)
+    {
+        igl::readOBJ( string(MESH_PATH)+model_names[idx], V, F );
+        normalize_unitbox(V);
+        V.rowwise() -= V.colwise().mean();
+        U  = VO = V;
+        state.CV.resize(0,3); state.numCV = 0;
+        state.place_constraints = true;
+        viewer.data().grid_texture();   
+    };
+
+    const auto & resetCV = [&]()
+    {
+        for (int ii=0; ii<state.numCV; ii++)
         {
-            // How to use
+            int fid = state.CV_row_col(ii,0);
+            int c   = state.CV_row_col(ii,1);
+            RowVector3d new_c = V.row(F(fid,c));
+            state.CV.row(ii) = new_c;
+        }
+    };
+
+    auto precompute = [&](){
+    if(state.CV.rows()==0){
+        state.CV.resize(1,3);
+        state.CV.row(0)          = V.row( F(0,0) );
+        state.CV_row_col.row(0) << 0,0;
+        state.numCV = 1;
+    }
+    igl::snap_points(state.CV,V,data.b);
+    data.bc.resize(data.b.size(),3);
+    for(int i=0;i<data.b.size();++i) data.bc.row(i)=V.row(data.b(i));
+        U = V;
+        cube_style_precomputation(V,F,data);
+    };
+    auto draw = [&](){
+        viewer.data().clear();
+        viewer.data().face_based = true;
+
+        if(state.place_constraints){
+            viewer.data().set_mesh(V,F);
+            viewer.data().set_colors(mesh_color);          // ← 原本的 GRAY/BLUE 換成這
+            viewer.data().set_points(state.CV, RED);
+            MatrixXd V_box;
+            MatrixXi E_box;
+            get_bounding_box(V, V_box, E_box);
+            viewer.data().add_points(V_box, RED);
+            for (unsigned i=0;i<E_box.rows(); ++i)
+                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),RED);
+        }else{
+            cube_style_single_iteration(V,U,data);
+            viewer.data().set_mesh(U,F);
+            viewer.data().set_colors(mesh_color);          // ← 同上
+            viewer.data().set_points(state.CV, RED);
+            MatrixXd V_box;
+            MatrixXi E_box;
+            get_bounding_box(V, V_box, E_box);
+            viewer.data().add_points(V_box, RED);
+            for (unsigned i=0;i<E_box.rows(); ++i)
+                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),RED);
+        }
+        viewer.data().set_points(state.CV,RED);
+        if(viewer.data().show_texture)
+        {
+            ensure_uv();
+            viewer.data().set_uv(TC, FT);
+
+            if(texture_mode == 0) {
+                viewer.data().grid_texture(); 
+            }
+            else if(texture_mode == 1) {
+                int size = 128;
+                Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(size, size), G(size, size), B(size, size);
+                for(int i = 0; i < size; ++i) {
+                    for(int j = 0; j < size; ++j) {
+                        if((j / 16) % 2 == 0) {
+                            R(i,j) = 255; G(i,j) = 255; B(i,j) = 255; 
+                        } else {
+                            R(i,j) = 0; G(i,j) = 0; B(i,j) = 0; 
+                        }
+                    }
+                }
+                viewer.data().set_texture(R, G, B);
+            }else if(texture_mode == 2) {
+                int size = 128;
+                Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(size, size), G(size, size), B(size, size);
+                for(int i = 0; i < size; ++i) {
+                    for(int j = 0; j < size; ++j) {
+                        if((i / 16) % 2 == 0) {
+                            R(i,j) = 255; G(i,j) = 255; B(i,j) = 255; 
+                        } else {
+                            R(i,j) = 0; G(i,j) = 0; B(i,j) = 0; 
+                        }
+                    }
+                }
+                viewer.data().set_texture(R, G, B);
+            }else if(texture_mode == 3) {
+                int size = 256;
+                Eigen::Matrix<unsigned char, Eigen::Dynamic, Eigen::Dynamic> R(size, size), G(size, size), B(size, size);
+                float frequency = 0.1; // 控制波紋密度
+
+                for(int i = 0; i < size; ++i) {
+                    for(int j = 0; j < size; ++j) {
+                        float dx = i - size / 2;
+                        float dy = j - size / 2;
+                        float dist = sqrt(dx * dx + dy * dy);
+                        float wave = 0.5 * (sin(dist * frequency) + 1.0); // 值域在 [0,1]
+
+                        unsigned char color = static_cast<unsigned char>(wave * 255);
+                        R(i,j) = color;
+                        G(i,j) = color;
+                        B(i,j) = color;
+                    }
+                }
+
+                viewer.data().set_texture(R, G, B);
+            }
+        }
+
+        // 軸
+        Eigen::Vector3d bbmin = V.colwise().minCoeff();
+        Eigen::Vector3d bbmax = V.colwise().maxCoeff();
+        double axis_len = 0.40 * (bbmax - bbmin).norm(); 
+
+        viewer.data().line_width = 5.0f;           
+        add_axes(viewer.data(), Eigen::Vector3d::Zero(), axis_len);
+    };
+
+    menu.callback_draw_viewer_window = [&](){
+        ImGui::SetNextWindowPos(ImVec2(ImGui::GetIO().DisplaySize.x-220, 0), ImGuiSetCond_FirstUseEver);
+		ImGui::SetNextWindowSize(ImVec2(220, 400), ImGuiSetCond_FirstUseEver);
+        ImGui::Begin("Viewer",nullptr,ImGuiWindowFlags_NoSavedSettings);
+        
+
+        if(ImGui::CollapsingHeader("Viewing", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            ImGui::DragFloat("Zoom",&viewer.core().camera_zoom,0.005f,0.1f,5.f,"%.2f");
+            orthographic = viewer.core().orthographic;
+            if(ImGui::Checkbox("Orthographic", &orthographic))
+                viewer.core().orthographic = orthographic;
+        }
+
+        if(ImGui::CollapsingHeader("Draw", ImGuiTreeNodeFlags_DefaultOpen))
+        {
+            show_tex = viewer.data().show_texture;
+            if(ImGui::Checkbox("Show texture", &show_tex))
+                viewer.data().show_texture = show_tex;
+
+            if(show_tex)
+            {
+                if(ImGui::SliderFloat("UV scale", &g_uv_scale, 0.5f, 10.0f, "%.2f"))
+                {
+                    TC.resize(0,2);        
+                    draw();             
+                }
+                
+                if (ImGui::RadioButton("checkerboard", texture_mode == 0)) {
+                    texture_mode = 0;
+                    draw();  
+                }
+                if (ImGui::RadioButton("Horizontal stripes", texture_mode == 1)){
+                    texture_mode = 1;
+                    draw();  
+                } 
+                if (ImGui::RadioButton("Vertical stripes", texture_mode == 2)){
+                    texture_mode = 2;
+                    draw(); 
+                }
+                if (ImGui::RadioButton("Wave pattern", texture_mode == 3)){
+                    texture_mode = 3;
+                    draw(); 
+                }
+            }
+            
+            show_overlay = viewer.data().show_overlay;
+            if(ImGui::Checkbox("Show overlay", &show_overlay))
+                viewer.data().show_overlay = show_overlay;
+
+            wireframe = viewer.data().show_lines;
+            if(ImGui::Checkbox("Wireframe", &wireframe))
+                viewer.data().show_lines = wireframe;
+
+            fill_faces = viewer.data().show_faces;
+            if(ImGui::Checkbox("Fill faces", &fill_faces))
+                viewer.data().show_faces = fill_faces;
+        }
+        ImGui::Separator();
+        {
             ImGui::Text("Instructions");
             ImGui::BulletText("[click]  place constrained points");
             ImGui::BulletText("[space]  change mode");
@@ -118,10 +330,46 @@ int main(int argc, char *argv[])
             ImGui::BulletText("L          show edges");
             ImGui::Text(" ");
         }
+        ImGui::End();
+    };
+
+    menu.callback_draw_custom_window = [&](){
         {
-            ImGui::PushItemWidth(-80);
-            ImGui::DragScalar("lambda", ImGuiDataType_Double, &data.lambda, 2e-1, 0, 0, "%.1e");
-            ImGui::PopItemWidth();
+            ImGui::SetNextWindowPos(ImVec2(0.f * menu.menu_scaling(),0),ImGuiCond_FirstUseEver);
+            ImGui::SetNextWindowSize(ImVec2(220, 400), ImGuiSetCond_FirstUseEver);
+            ImGui::Begin(
+                "Cubic Stylization", nullptr,
+                ImGuiWindowFlags_NoSavedSettings
+            );
+        }
+        {
+            ImGui::DragScalar("lambda",ImGuiDataType_Double,&data.lambda,2e-1,0,0,"%.2e");
+            ImGui::Separator();
+            ImGui::Text("Models:");
+            for(int i=0;i<(int)model_names.size();++i)
+                if(ImGui::Selectable(model_names[i].c_str(), i==current_model))
+                { 
+                    current_model=i; 
+                    load_mesh(i); 
+                    draw(); 
+                }
+            ImGui::Separator();
+            ImGui::ColorEdit3("Background", bg_color.data());
+            if(ImGui::IsItemDeactivatedAfterEdit())
+            {
+                viewer.core().background_color << bg_color[0], bg_color[1], bg_color[2], 1.0f;
+            }
+    
+            static float mc[3];
+            mc[0] = static_cast<float>(mesh_color[0]);
+            mc[1] = static_cast<float>(mesh_color[1]);
+            mc[2] = static_cast<float>(mesh_color[2]);
+    
+            if(ImGui::ColorEdit3("Mesh color", mc))
+            {
+                mesh_color << mc[0], mc[1], mc[2];
+                draw();                     
+            }
         }
         {
             // output file name
@@ -142,62 +390,6 @@ int main(int argc, char *argv[])
 			igl::writeOBJ(inputFile, V, F);
 		}
         ImGui::End();
-    };
-
-    // recompute state.CV function
-    int maxCV = 100;
-    state.CV_row_col.resize(maxCV,2); // assume nor more than 100 constraints
-    const auto & resetCV = [&]()
-    {
-        for (int ii=0; ii<state.numCV; ii++)
-        {
-            int fid = state.CV_row_col(ii,0);
-            int c   = state.CV_row_col(ii,1);
-            RowVector3d new_c = V.row(F(fid,c));
-            state.CV.row(ii) = new_c;
-        }
-    };
-
-    // draw function
-    const auto & draw = [&]()
-    {
-        const Eigen::RowVector3d blue(149.0/255, 217.0/255, 244.0/255);
-        const Eigen::RowVector3d red(250.0/255, 114.0/255, 104.0/255);
-        const Eigen::RowVector3d gray(200.0/255, 200.0/255, 200.0/255);
-
-        if(state.place_constraints)
-        {
-            viewer.data().clear();
-            viewer.data().face_based = true;
-            viewer.data().set_mesh(V,F);
-            viewer.data().set_colors(gray);
-            viewer.data().set_points(state.CV, red);
-
-            // draw bounding box
-            MatrixXd V_box;
-            MatrixXi E_box;
-            get_bounding_box(V, V_box, E_box);
-            viewer.data().add_points(V_box, red);
-            for (unsigned i=0;i<E_box.rows(); ++i)
-                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
-        }
-        else
-        {
-            cube_style_single_iteration(V,U,data);
-            viewer.data().clear();
-            viewer.data().face_based = true;
-            viewer.data().set_mesh(U,F);
-            viewer.data().set_colors(blue);
-            viewer.data().set_points(state.CV, red);
-
-            // draw bounding box
-            MatrixXd V_box;
-            MatrixXi E_box;
-            get_bounding_box(U, V_box, E_box);
-            viewer.data().add_points(V_box, red);
-            for (unsigned i=0;i<E_box.rows(); ++i)
-                viewer.data().add_edges(V_box.row(E_box(i,0)),V_box.row(E_box(i,1)),red);
-        }
     };
 
     // when key pressed do 
@@ -393,16 +585,17 @@ int main(int argc, char *argv[])
     };
 
     // initialize the scene
-    {
+    {   
         viewer.data().set_mesh(V,F);
-        viewer.data().show_lines = false;
-        viewer.core().is_animating = true;
-        viewer.data().face_based = true;
+        viewer.data().show_lines=false;
+        viewer.core().is_animating=true;
+        viewer.data().face_based=true;
         Vector4f backColor;
-        backColor << 208/255., 237/255., 227/255., 1.;
+        backColor << bg_color(0), bg_color(1), bg_color(2), 1.f;
         viewer.core().background_color = backColor;
+        load_mesh(current_model);
         draw();
         viewer.launch();
-    }
+    } 
 
 }

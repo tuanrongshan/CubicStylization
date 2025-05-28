@@ -10,6 +10,7 @@ option(LIBIGL_WITH_OPENGL_GLFW       "Use GLFW"           ON)
 option(LIBIGL_WITH_VIEWER            "Use OpenGL viewer"  ON)
 option(LIBIGL_WITH_OPENGL_GLFW_IMGUI "Use ImGui"          ON)
 
+
 find_package(LIBIGL REQUIRED)
 
 # Add your project files
